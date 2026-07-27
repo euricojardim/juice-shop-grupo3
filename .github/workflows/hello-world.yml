@@ -1,6 +1,8 @@
 name: Hello world
 on: workflow_dispatch
+
 jobs:
+
   # the id of the name
   hello-world-job:
     # The type of runner that the job will run on
@@ -12,3 +14,18 @@ jobs:
       # Runs a single command using the runner shell
       - name: Run a one-line script
         run: echo "Hello world"
+  
+  job-a:
+    needs: hello-world-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Job A
+        run: echo "Job A"
+
+  
+  job-b:
+    needs: hello-world-job
+    runs-on: ubuntu-latest
+    steps:
+      - name: Job B
+        run: echo "Job B"
