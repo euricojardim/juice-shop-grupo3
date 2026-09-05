@@ -152,6 +152,133 @@ gantt
 
 Não inclui o tempo dos três sócios, que se assume como aporte.
 
+### Operação recorrente (a 25 clientes — piloto e primeiro lote)
+
+Este é o cenário real dos primeiros meses: dezembro de 2026 (piloto, sem receita) e março
+de 2027 (primeiro lote de 25 aderentes). Duas colunas, porque a escolha é genuína:
+**mínimo** é o que basta para operar com segurança aceitável durante o piloto; **recomendado**
+é o que se deve ter no dia em que existe o primeiro cliente pagante.
+
+#### Alojamento
+
+Base: Hetzner ou OVHcloud, região UE, Docker em Ubuntu Server — coerente com a *stack* da
+equipa. Valores mensais, com IVA à parte.
+
+| Componente | Especificação | Mínimo | Recomendado |
+|---|---|---|---|
+| Servidor de aplicação + workers | 4 vCPU, 8 GB RAM, 160 GB NVMe | 16 € | 16 € |
+| Servidor de base de dados MariaDB | 4 vCPU, 8 GB RAM, 160 GB NVMe, disco dedicado | 16 € | 16 € |
+| Réplica MariaDB (recuperação de desastre) | 2 vCPU, 4 GB, noutra zona | — | 8 € |
+| Ambiente de *staging* | 2 vCPU, 4 GB, desligável fora de horas | 5 € | 8 € |
+| Balanceador de carga gerido | Necessário para implantações sem interrupção | — | 6 € |
+| **Subtotal alojamento** | | **37 €** | **54 €** |
+
+Notas:
+
+- **A base de dados nunca partilha máquina com a aplicação**, nem sequer no piloto. É
+  separação de contenção, não de desempenho: um comprometimento da aplicação não deve dar
+  acesso direto ao motor de base de dados.
+- A **réplica não é opcional a partir do primeiro cliente pagante**. Custa 8 €/mês e é o
+  que torna credível o objetivo de RTO ≤ 4 h; sem ela, uma falha do servidor primário em
+  época de IVA é uma reposição a partir de cópia, com horas de indisponibilidade.
+- Alternativa gerida, se o tempo do Sérgio valer mais do que a diferença: MariaDB gerida na
+  OVH Public Cloud Databases custa 25–40 €/mês; Azure Database for MySQL fica em 60–80 €/mês.
+  Ambas eliminam trabalho de manutenção e correção de segurança do motor.
+
+#### Domínio, DNS e correio
+
+| Componente | Detalhe | Mínimo | Recomendado |
+|---|---|---|---|
+| `cifra.pt` | Registo/renovação, ~20–30 €/ano | 2 € | 2 € |
+| `cifra.com` (defensivo) | ~12 €/ano | — | 1 € |
+| DNS gerido | Cloudflare Free ou plano pago | — | 5 € |
+| Certificados TLS | Let's Encrypt, incluindo *wildcard* | 0 € | 0 € |
+| Correio profissional | Google Workspace ou Microsoft 365, 4 caixas | 25 € | 28 € |
+| Email transacional | Brevo/Postmark, fornecedor em região UE | 0 € | 15 € |
+| **Subtotal domínio e correio** | | **27 €** | **51 €** |
+
+Três notas práticas que valem mais do que o custo:
+
+- **Registar `cifra.pt` já, antes de qualquer comunicação pública**, com renovação
+  automática e bloqueio de transferência ativos. O domínio é o único ativo desta lista que
+  não se pode recomprar por 20 € depois de alguém o registar.
+- O **email transacional tem de ser um fornecedor com processamento na UE** e com DPA
+  assinado, como o resto da cadeia. E nenhuma mensagem leva dados fiscais no corpo: só
+  notificação e ligação ao portal.
+- Configurar **SPF, DKIM e DMARC em modo `reject`** desde o primeiro dia. Um serviço de
+  contabilidade é um alvo óbvio de fraude por email em nome da marca.
+
+#### Cópias de segurança
+
+| Componente | Detalhe | Mínimo | Recomendado |
+|---|---|---|---|
+| *Snapshots* automáticos dos servidores | +20 % do custo do servidor, no fornecedor | 7 € | 11 € |
+| Espaço de cópias (1 TB) | Cópia completa diária + *binlog* contínuo | 4 € | 4 € |
+| **Cópia fora do fornecedor**, cifrada | ~100 GB noutro fornecedor e outra jurisdição UE | — | 6 € |
+| Object storage dos documentos | Escalão mínimo do fornecedor | 6 € | 6 € |
+| Ferramenta de cópia e restauro | restic ou borg, auto-alojado | 0 € | 0 € |
+| **Subtotal cópias de segurança** | | **17 €** | **27 €** |
+
+O dimensionamento é contra-intuitivo e vale a pena registá-lo: 25 clientes geram cerca de
+**2,5 GB de documentos por ano** (≈ 250 documentos por cliente, ~400 KB cada). Mesmo a 500
+clientes são ~50 GB/ano. **O custo de armazenamento é inteiramente determinado pelo escalão
+mínimo do fornecedor, não pelo volume** — pelo que não há qualquer razão para poupar aqui.
+
+Política de retenção a aplicar desde o piloto: 30 cópias diárias, 12 mensais, cifradas com
+chave **distinta da produção** e guardadas em local separado. E a regra que torna tudo isto
+real: **restauro completo testado e cronometrado uma vez por mês, com resultado registado**.
+Uma cópia nunca testada não é uma cópia.
+
+#### Restantes serviços a 25 clientes
+
+| Rubrica | Mínimo | Recomendado |
+|---|---|---|
+| Inferência de IA (assistente, triagem, classificação) | 30 € | 70 € |
+| OCR e extração de documentos (~500 páginas/mês) | 5 € | 15 € |
+| Observabilidade e SIEM (auto-alojado no servidor existente) | 0 € | 25 € |
+| Rastreio de erros | 0 € | 26 € |
+| Cofre de segredos (auto-alojado *vs.* gerido) | 0 € | 6 € |
+| WAF e CDN | 0 € | 20 € |
+| Antivírus de ficheiros carregados (ClamAV) | 0 € | 0 € |
+| Comissões de pagamento (~1,5 % de ~1 275 € de MRR) | 19 € | 19 € |
+| **Subtotal** | **54 €** | **181 €** |
+
+Fora desta conta, porque só entra na Fase 2: o **agregador PSD2 cobra um piso mensal de
+50–150 €/mês independentemente do número de contas ligadas**. Este é o argumento decisivo
+para não ativar a conciliação bancária durante o piloto — a 25 clientes, o piso do
+agregador sozinho custa mais do que todo o alojamento.
+
+#### Total a 25 clientes
+
+| | Mínimo | Recomendado |
+|---|---|---|
+| Alojamento | 37 € | 54 € |
+| Domínio, DNS e correio | 27 € | 51 € |
+| Cópias de segurança | 17 € | 27 € |
+| Restantes serviços | 54 € | 181 € |
+| **Total mensal** | **~135 €** | **~313 €** |
+| *(+ agregador PSD2, se ativado)* | *+50 €* | *+150 €* |
+| **Custo por cliente/mês** | **~5,40 €** | **~12,50 €** |
+
+**A leitura que importa.** Com uma mistura de 15 Start e 10 Pro, 25 clientes valem cerca de
+**1 275 € de MRR**. O custo de operação representa **11 % a 25 % da receita** — contra os
+5 % a 9 % estimados a 500 clientes. Ou seja: **a infraestrutura só é barata à escala; no
+primeiro lote consome um quarto da receita**, e com o agregador PSD2 ativado ultrapassaria
+um terço.
+
+Três consequências:
+
+1. **Durante o piloto (dez 2026), estes 135–313 €/mês são pura queima** — não há receita.
+   São ~3 meses, ou seja 400–950 €, já contemplados na rubrica de infraestrutura de
+   pré-produção do orçamento de desenvolvimento acima.
+2. **Adiar deliberadamente tudo o que tem piso mensal fixo** — agregador PSD2, planos pagos
+   de observabilidade e de rastreio de erros — até o número de clientes diluir o custo.
+   Auto-alojar a observabilidade no servidor que já existe é a decisão certa a esta escala.
+3. **Não cortar em alojamento, cópias de segurança nem domínio.** Alojamento e cópias são
+   81 € dos 313 € do cenário recomendado, e o domínio são 3 €. É a parte mais barata da
+   conta e a única cuja falha é irrecuperável: um servidor perdido sem réplica, uma cópia
+   que nunca foi testada ou um domínio que expirou não se resolvem com dinheiro depois.
+
 ### Operação recorrente (a 500 clientes)
 
 | Rubrica | €/mês |
